@@ -1,23 +1,37 @@
-from algorithm import *
+from encoder import Encoder
+from decoder import Decoder
 
 
-def main():
-    base_name = input("Введите имя файла без расширения: ").strip()
-    if not base_name:
-        print("Ошибка: Имя файла не может быть пустым.")
-        return
+def main() -> None:
+    while True:
+        print("\n=== Shannon-Fano Codec ===")
+        print("Выберите действие:")
+        print("1. Кодировать файл")
+        print("2. Декодировать файл")
+        print("3. Выйти из программы")
 
-    # Создание экземпляра кодека
-    codec = ShannonFanoCodec(base_name)
+        choice = input("Введите номер действия: ").strip()
 
-    # Кодирование файла
-    codec.encode()
+        if choice == '1':
+            file_path = input("Введите полный путь к файлу для кодирования (с расширением): ").strip()
+            if not file_path:
+                print("Ошибка: Путь к файлу не может быть пустым.")
+                continue
+            encoder = Encoder(file_path)
+            encoder.encode()
 
-    # Декодирование файла
-    codec.decode()
+        elif choice == '2':
+            encoded_file_path = input("Введите полный путь к закодированному файлу для декодирования: ").strip()
+            if not encoded_file_path:
+                print("Ошибка: Путь к закодированному файлу не может быть пустым.")
+                continue
 
-    # Проверка целостности
-    codec.verify_integrity()
+            decoder = Decoder(encoded_file_path)
+            decoder.decode()
+
+        elif choice == '3':
+            break
+
 
 if __name__ == "__main__":
     main()
