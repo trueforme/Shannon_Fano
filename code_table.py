@@ -1,11 +1,7 @@
 from collections import Counter
 import pickle
-from typing import Any, NamedTuple
-
-
-class SymbolFrequency(NamedTuple):
-    symbol: int
-    frequency: int
+from typing import Any
+from util_classes import SymbolFrequency
 
 
 class CodeTable:
@@ -18,17 +14,18 @@ class CodeTable:
         """
         freq_counter = Counter(data)
         symbols: list[SymbolFrequency] = sorted(
-            [SymbolFrequency(symbol, freq) for symbol, freq in freq_counter.items()],
+            [SymbolFrequency(symbol, freq) for symbol, freq in
+             freq_counter.items()],
             key=lambda sf: sf.frequency,
             reverse=True
         )
         self.encode_symbols(symbols, prefix='')
 
     def encode_symbols(
-        self,
-        symbols: list[SymbolFrequency],
-        prefix: str,
-        max_depth: int = 100
+            self,
+            symbols: list[SymbolFrequency],
+            prefix: str,
+            max_depth: int = 100
     ) -> None:
         """
         Рекурсивно кодирует символы с помощью алгоритма Шеннона-Фано.
@@ -73,7 +70,8 @@ class CodeTable:
 
         return split_index
 
-    def _handle_base_case(self, symbols: list[SymbolFrequency], prefix: str) -> None:
+    def _handle_base_case(self, symbols: list[SymbolFrequency],
+                          prefix: str) -> None:
         """
         Обрабатывает базовый случай, назначая коды символам.
         """

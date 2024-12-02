@@ -1,46 +1,45 @@
 import logging
 from pathlib import Path
-from typing import Any, Optional
 
 from encoder import Encoder
 from decoder import Decoder
-from fileHandler import FileHandler
-from codeTable import CodeTable
-from pathHandler import PathHandler
-from metadata_handler import MetadataHandler
+from file_handler import FileHandler
+from code_table import CodeTable
+from path_handler import PathHandler
+from util_classes import FileInfo
+from metadata_handler import MetadataHandler, Metadata
 from encrypter import (
-    derive_key,
     get_files_encrypt_info,
-    read_archive_header,
-    read_and_decrypt_metadata,
+    read_and_decrypt_metadata_with_password,
     read_and_decrypt_file_data,
 )
 
 
 class Archiver:
-    def __init__(self) -> None:
+    def __init__(self):
         """
         Инициализирует объект архива.
         """
-        self._archive_file_path: Path = Path()
-        self._base_directory: Path = Path()
-        self._pathHandler: Optional[PathHandler] = None
+        self._archive_file_path: Path | None = None
+        self._base_directory: Path | None = None
+        self._pathHandler: PathHandler | None = None
         self._encoder = Encoder()
         self._decoder = Decoder()
         self._salt_size = 16
         self._nonce_size = 12
 
-    def add_paths(self, paths: list[str]) -> None:
+    def add_paths(self, paths: list[Path]) -> None:
         """
         Добавляет файлы или каталоги для архивации.
         """
-        absolute_paths = [Path(path).resolve() for path in paths]
-        existing_paths = [path for path in absolute_paths if path.exists()]
-        non_existing_paths = [path for path in absolute_paths if
-                              not path.exists()]
-
-        for path in non_existing_paths:
-            logging.error(f"Путь '{path}' не существует и будет пропущен.")
+        existing_paths = []
+        for path in paths:
+            resolved_path = path.resolve()
+            if resolved_path.exists():
+                existing_paths.append(resolved_path)
+            else:
+                logging.error(
+                    f"Путь '{resolved_path}' не существует и будет пропущен.")
 
         if not existing_paths:
             logging.error(
@@ -51,7 +50,7 @@ class Archiver:
         self._base_directory = self._pathHandler.get_base_directory()
         self._pathHandler.collect_file_info()
 
-    def archive(self, archive_file_path: str,
+    def archive(self, archive_file_path: Path,
                 password: str | None = None) -> None:
         """
         Создает архив из добавленных файлов и каталогов с опциональной парольной защитой.
@@ -65,7 +64,7 @@ class Archiver:
         if not FileHandler.validate_files_for_archiving(file_info_list):
             return
 
-        self._archive_file_path = Path(archive_file_path).resolve()
+        self._archive_file_path = archive_file_path.resolve()
         logging.debug(f"Путь архива: {self._archive_file_path}")
 
         if self._archive_file_path.is_dir():
@@ -103,41 +102,36 @@ class Archiver:
 
         self._log_compression_info(file_info_list)
 
-    def extract(self, archive_file_path: str, extract_path: str | None = None,
-                password: str | None = None) -> None:
+    def extract(
+            self,
+            archive_file_path: Path,
+            extract_path: Path | None = None,
+            password: str | None = None
+    ) -> None:
         """
         Извлекает файлы и каталоги из архива.
         """
-        archive_path = Path(archive_file_path).resolve()
+        archive_path = archive_file_path.resolve()
         if not archive_path.exists():
             logging.error(f"Архив '{archive_path}' не найден.")
             return
 
-        extract_path = Path(
-            extract_path).resolve() if extract_path else Path.cwd()
+        extract_path = extract_path.resolve() if extract_path else Path.cwd()
         logging.debug(f"Извлечение архива '{archive_path}' в '{extract_path}'")
 
         try:
-            with open(archive_path, 'rb') as archive_file:
-                has_password, salt, nonce_meta = read_archive_header(
-                    archive_file)
-
-                if has_password:
-                    if not password:
-                        print("Этот архив защищён паролем.")
-                        password = input(
-                            "Введите пароль для извлечения: ").strip()
-                    key = derive_key(password, salt)
-                else:
-                    key = None
-
-                metadata = read_and_decrypt_metadata(archive_file, key,
-                                                     nonce_meta, has_password)
-                if metadata is None:
+            with archive_path.open('rb') as archive_file:
+                result: tuple[
+                            Metadata, bytes | None] | None = read_and_decrypt_metadata_with_password(
+                    archive_file, password)
+                if result is None:
+                    logging.error(
+                        "Не удалось прочитать или дешифровать метаданные.")
                     return
+                metadata, key = result
 
-                code_table = CodeTable.deserialize(metadata['code_table'])
-                file_info_list = metadata['file_info_list']
+                code_table = metadata.code_table
+                file_info_list = metadata.file_info_list
 
                 self._extract_files_and_directories(
                     archive_file,
@@ -145,12 +139,11 @@ class Archiver:
                     file_info_list,
                     code_table,
                     key,
-                    has_password
+                    metadata.code_table is not None
                 )
 
                 logging.info(
                     f"Архив '{archive_path}' успешно извлечён в '{extract_path}'.")
-
         except IOError as e:
             logging.exception(
                 f"Ошибка при чтении архива '{archive_path}': {e}")
@@ -162,7 +155,7 @@ class Archiver:
             self,
             archive_file,
             extract_path: Path,
-            file_info_list: list[dict[str, Any]],
+            file_info_list: list[FileInfo],
             code_table: CodeTable,
             key: bytes | None,
             has_password: bool
@@ -171,9 +164,9 @@ class Archiver:
         Извлекает файлы и каталоги из архива.
         """
         for file_info in file_info_list:
-            relative_path = Path(file_info['relative_path'])
+            relative_path = Path(file_info.relative_path)
             full_path = extract_path / relative_path
-            if file_info['is_dir']:
+            if file_info.is_dir:
                 full_path.mkdir(parents=True, exist_ok=True)
             else:
                 description = f"файла '{full_path}'"
@@ -184,28 +177,35 @@ class Archiver:
                     description
                 )
                 if encoded_data is None:
+                    logging.error(
+                        f"Не удалось дешифровать данные для '{full_path}'.")
                     return
 
-                decoded_data = self._decoder.decode_data(encoded_data,
-                                                         file_info[
-                                                             'extra_bits'],
-                                                         code_table)
+                decoded_data = self._decoder.decode_data(
+                    encoded_data,
+                    file_info.extra_bits,
+                    code_table
+                )
                 full_path.parent.mkdir(parents=True, exist_ok=True)
-                FileHandler.write_file(str(full_path), decoded_data)
+                FileHandler.write_file(full_path, decoded_data)
 
     @staticmethod
-    def _log_compression_info(file_info_list: list[dict[str, Any]]) -> None:
+    def _log_compression_info(file_info_list: list[FileInfo]) -> None:
         """
         Записывает информацию о сжатии каждого файла в лог.
         """
         for file_info in file_info_list:
-            if not file_info['is_dir']:
-                relative_path = file_info['relative_path']
-                original_size = file_info['original_size']
-                compressed_size = file_info['compressed_size']
-                compression_ratio = (
-                                            1 - compressed_size / original_size) * 100 \
-                    if original_size != 0 else 0
+            if not file_info.is_dir:
+                relative_path = file_info.relative_path
+                original_size = file_info.original_size
+                compressed_size = file_info.compressed_size
+
+                if original_size != 0:
+                    compression_ratio = (
+                                                1 - compressed_size / original_size) * 100
+                else:
+                    compression_ratio = 0
+
                 logging.info(f"Файл: {relative_path}")
                 logging.info(f"Исходный размер: {original_size} байт")
                 logging.info(f"Размер в архиве: {compressed_size} байт")

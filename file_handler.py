@@ -1,9 +1,7 @@
 import logging
 from pathlib import Path
 import struct
-from typing import Any
-
-from encrypter import EncryptedData
+from util_classes import FileInfo, EncryptedData
 
 
 class FileHandler:
@@ -13,38 +11,47 @@ class FileHandler:
     """
 
     @staticmethod
-    def read_files_data(file_info_list: list[dict[str, Any]]) -> bytearray:
+    def read_files_data(file_info_list: list[FileInfo]) -> bytearray:
         """
         Читает данные файлов для архивации и собирает их в один байтовый массив.
         """
         all_data = bytearray()
         for file_info in file_info_list:
-            if not file_info['is_dir']:
-                data = FileHandler.read_file_static(
-                    str(file_info['absolute_path']))
+            if not file_info.is_dir:
+                data = FileHandler.read_file_static(file_info.absolute_path)
                 if data is None:
                     logging.error(
-                        f"Ошибка при чтении файла '{file_info['absolute_path']}'.")
+                        f"Ошибка при чтении файла '{file_info.absolute_path}'.")
                     return bytearray()
-                file_info['data'] = data
+                file_info.data = data
                 all_data.extend(data)
         return all_data
 
     @staticmethod
-    def read_file_static(file_path: str) -> bytes | None:
+    def read_file_static(file_path: Path) -> bytes | None:
         """
         Читает данные из файла по заданному пути.
         """
         try:
-            path = Path(file_path).resolve()
-            logging.debug(f"Попытка открытия файла: {path}")
-            return path.read_bytes()
+            logging.debug(f"Попытка открытия файла: {file_path}")
+            return file_path.read_bytes()
         except IOError as e:
             logging.exception(f"Ошибка при чтении файла '{file_path}': {e}")
             return None
 
     @staticmethod
-    def read_bytes_with_size(file, description: str) -> bytes:
+    def write_file(file_path: Path, data: bytes) -> None:
+        """
+        Записывает данные в файл по заданному пути.
+        """
+        try:
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            file_path.write_bytes(data)
+        except IOError as e:
+            logging.exception(f"Ошибка при записи файла '{file_path}': {e}")
+
+    @staticmethod
+    def read_bytes_with_size(file: any, description: str) -> bytes:
         """
         Читает из файла данные с предварительно записанным размером.
         """
@@ -64,7 +71,7 @@ class FileHandler:
         return data
 
     @staticmethod
-    def write_bytes_with_size(file, data: bytes) -> None:
+    def write_bytes_with_size(file: any, data: bytes) -> None:
         """
         Записывает данные в файл с предварительной записью их размера.
         """
@@ -74,20 +81,8 @@ class FileHandler:
             file.write(data)
 
     @staticmethod
-    def write_file(file_path: str, data: bytes) -> None:
-        """
-        Записывает данные в файл по заданному пути.
-        """
-        try:
-            path = Path(file_path).resolve()
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(data)
-        except IOError as e:
-            logging.exception(f"Ошибка при записи файла '{file_path}': {e}")
-
-    @staticmethod
     def validate_files_for_archiving(
-            file_info_list: list[dict[str, Any]]) -> bool:
+            file_info_list: list[FileInfo]) -> bool:
         """
         Проверяет наличие файлов или каталогов для архивации.
         """
@@ -109,10 +104,8 @@ class FileHandler:
         Записывает данные в файл архива.
         """
         try:
-            with open(archive_file_path, 'wb') as archive_file:
-
-                archive_file.write(bytes(
-                    [1 if password else 0]))
+            with archive_file_path.open('wb') as archive_file:
+                archive_file.write(bytes([1 if password else 0]))
 
                 FileHandler.write_bytes_with_size(archive_file, salt)
 

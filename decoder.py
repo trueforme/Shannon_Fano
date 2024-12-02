@@ -1,10 +1,12 @@
-from codeTable import CodeTable
-from typing import Any
+from code_table import CodeTable
 import logging
+from util_classes import FileInfo
+
 
 class Decoder:
     @staticmethod
-    def decode_data(encoded_bytes: bytes, extra_bits: int, code_table: CodeTable) -> bytes:
+    def decode_data(encoded_bytes: bytes, extra_bits: int,
+                    code_table: CodeTable) -> bytes:
         """
         Декодирует данные с использованием кодовой таблицы.
         """
@@ -24,17 +26,18 @@ class Decoder:
         return bytes(decoded_bytes)
 
     @staticmethod
-    def decode_files_data(file_info_list: list[dict[str, Any]], code_table: CodeTable) -> None:
+    def decode_files_data(file_info_list: list[FileInfo],
+                          code_table: CodeTable) -> None:
         """
         Декодирует данные каждого файла в списке `file_info_list`.
         """
         for file_info in file_info_list:
-            if not file_info['is_dir']:
+            if not file_info.is_dir:
                 decoded_data = Decoder.decode_data(
-                    file_info['encoded_data'],
-                    file_info['extra_bits'],
+                    file_info.encoded_data,
+                    file_info.extra_bits,
                     code_table
                 )
-                file_info['decoded_data'] = decoded_data
-                file_info['encoded_data'] = None
-                logging.debug(f"Файл '{file_info['relative_path']}' декодирован.")
+                file_info.data = decoded_data
+                file_info.encoded_data = b''
+                logging.debug(f"Файл '{file_info.relative_path}' декодирован.")
