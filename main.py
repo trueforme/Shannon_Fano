@@ -1,36 +1,90 @@
-from encoder import Encoder
-from decoder import Decoder
+import logging
+from enum import Enum
+from archiver import Archiver
+from pathlib import Path
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    filename='archiver.log',
+    filemode='w',
+    encoding='utf-8'
+)
+
+
+class Command(str, Enum):
+    ENCODE = '1'
+    EXTRACT = '2'
+    EXIT = '3'
 
 
 def main() -> None:
     while True:
-        print("\n=== Shannon-Fano Codec ===")
+        archiver = Archiver()
+        print("\n=== Shannon-Fano Archiver ===")
         print("Выберите действие:")
-        print("1. Кодировать файл")
-        print("2. Декодировать файл")
-        print("3. Выйти из программы")
+        print(f"{Command.ENCODE.value}. Создать архив")
+        print(f"{Command.EXTRACT.value}. Извлечь архив")
+        print(f"{Command.EXIT.value}. Выйти из программы")
 
-        choice = input("Введите номер действия: ").strip()
+        choice = input(
+            f"Введите номер действия ({Command.ENCODE.value}/{Command.EXTRACT.value}/{Command.EXIT.value}): ").strip()
 
-        if choice == '1':
-            file_path = input("Введите полный путь к файлу для кодирования (с расширением): ").strip()
-            if not file_path:
-                print("Ошибка: Путь к файлу не может быть пустым.")
+        if choice == Command.ENCODE.value:
+            paths_input = input(
+                "Введите пути к файлам или каталогам для архивации (разделяйте запятыми): ").strip()
+            if not paths_input:
+                print("Ошибка: Путь(и) не могут быть пустыми.")
                 continue
-            encoder = Encoder(file_path)
-            encoder.encode()
+            paths = [Path(path.strip()) for path in paths_input.split(',')]
+            archiver.add_paths(paths)
 
-        elif choice == '2':
-            encoded_file_path = input("Введите полный путь к закодированному файлу для декодирования: ").strip()
-            if not encoded_file_path:
-                print("Ошибка: Путь к закодированному файлу не может быть пустым.")
+            archive_file_path_input = input(
+                "Введите путь для сохранения архива: ").strip()
+            if not archive_file_path_input:
+                print("Ошибка: Путь для архива не может быть пустым.")
                 continue
 
-            decoder = Decoder(encoded_file_path)
-            decoder.decode()
+            password = input(
+                "Установите пароль для архива (оставьте пустым для отсутствия пароля): ").strip()
 
-        elif choice == '3':
+            archive_path = Path(archive_file_path_input).resolve()
+            if archive_path.is_dir():
+                archive_path = archive_path / "archive.bin"
+                print(
+                    f"Указан путь к директории. Архив будет сохранён как '{archive_path}'."
+                )
+
+            archiver.archive(archive_path, password if password else None)
+
+        elif choice == Command.EXTRACT.value:
+            archive_file_path_input = input(
+                "Введите путь к архиву для извлечения: ").strip()
+            if not archive_file_path_input:
+                print("Ошибка: Путь к архиву не может быть пустым.")
+                continue
+            archive_file_path = Path(archive_file_path_input).resolve()
+
+            extract_path_input = input(
+                "Введите путь для извлечения файлов (оставьте пустым для текущего каталога): ").strip()
+            extract_path = Path(
+                extract_path_input).resolve() if extract_path_input else None
+
+            password = input(
+                "Введите пароль для извлечения (если архив не защищён паролем, оставьте пустым): ").strip()
+
+            archiver.extract(
+                archive_file_path,
+                extract_path,
+                password if password else None
+            )
+
+        elif choice == Command.EXIT.value:
+            print("Выход из программы.")
             break
+
+        else:
+            print("Некорректный выбор.")
 
 
 if __name__ == "__main__":
